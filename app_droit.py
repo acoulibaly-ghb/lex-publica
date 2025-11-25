@@ -69,7 +69,7 @@ if "chat_session" not in st.session_state:
         if docs:
             # On reste sur le modèle 2.5-flash qui est le bon compromis
             model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash",
+                model_name="gemini-2.5-flash-lite",
                 system_instruction=SYSTEM_PROMPT
             )
             st.session_state.chat_session = model.start_chat(
