@@ -7,10 +7,21 @@ import tempfile
 import re
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Lex publica Coulibaly", page_icon="⚖️")
-st.title("⚖️ Assistant Droit administratif")
+st.set_page_config(page_title="Tuteur Droit Admin", page_icon="⚖️")
+st.title("⚖️ Assistant Droit Administratif")
 
-# --- RÉCUPÉRATION DE LA CLÉ API SECRÈTE ---
+# --- BARRE LATÉRALE (PARAMÈTRES) ---
+with st.sidebar:
+    st.header("Paramètres")
+    # L'interrupteur pour la voix. Par défaut sur False (Eteint) pour la vitesse.
+    enable_audio = st.toggle("Activer la lecture vocale 🗣️", value=False)
+    
+    if enable_audio:
+        st.warning("⚠️ La voix ralentit un peu la réponse.")
+    else:
+        st.info("⚡ Mode texte rapide activé.")
+
+# --- RÉCUPÉRATION DE LA CLÉ API ---
 api_key = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=api_key)
 
@@ -42,14 +53,12 @@ def load_and_process_pdfs():
         return None
 
     uploaded_files_refs = []
-    status_text = st.empty()
-    status_text.text(f"Chargement de {len(pdf_files)} chapitres de cours...")
-
-    for pdf in pdf_files:
-        uploaded_file = genai.upload_file(pdf, mime_type="application/pdf")
-        uploaded_files_refs.append(uploaded_file)
-    
-    status_text.empty()
+    # Petit indicateur discret au démarrage
+    with st.spinner(f"Chargement de {len(pdf_files)} chapitres de cours..."):
+        for pdf in pdf_files:
+            uploaded_file = genai.upload_file(pdf, mime_type="application/pdf")
+            uploaded_files_refs.append(uploaded_file)
+            
     return uploaded_files_refs
 
 # --- DÉMARRAGE DE LA SESSION ---
@@ -58,7 +67,7 @@ if "chat_session" not in st.session_state:
         docs = load_and_process_pdfs()
         
         if docs:
-            # Note : On utilise bien gemini-2.5-flash ici
+            # On reste sur le modèle 2.5-flash qui est le bon compromis
             model = genai.GenerativeModel(
                 model_name="gemini-2.5-flash",
                 system_instruction=SYSTEM_PROMPT
@@ -70,7 +79,7 @@ if "chat_session" not in st.session_state:
                 ]
             )
             st.session_state.messages = []
-            st.success("✅ Le cours est chargé. Posez votre question !")
+            st.toast("Cours chargé avec succès !", icon="✅")
             
     except Exception as e:
         st.error(f"Erreur de connexion : {e}")
@@ -87,33 +96,32 @@ if prompt := st.chat_input("Votre question sur le cours..."):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Réponse IA + Audio
+    # Réponse IA
     if st.session_state.chat_session:
         with st.chat_message("assistant"):
-            with st.spinner("Recherche et synthèse vocale..."):
-                # 1. Texte
+            with st.spinner("Recherche dans le cours..."):
+                # 1. Texte (Toujours généré)
                 response = st.session_state.chat_session.send_message(prompt)
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 
-                # 2. Audio
-                try:
-                    # --- NETTOYAGE ---
-                    # Enlever * et #
-                    text_for_audio = re.sub(r'[\*#]', '', response.text)
-                    # Remplacer p. 12 par page 12
-                    text_for_audio = re.sub(r'p\.\s*(\d+)', r'page \1', text_for_audio)
-                    # Remplacer Pr. par Professeur
-                    text_for_audio = text_for_audio.replace("Pr.", "Professeur")
-                    
-                    # Génération
-                    tts = gTTS(text=text_for_audio, lang='fr')
-                    
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                        tts.save(fp.name)
-                        audio_path = fp.name
-                    
-                    st.audio(audio_path, format="audio/mp3")
-                    
-                except Exception as e:
-                    st.warning(f"Note : Audio non disponible ({e})")
+                # 2. Audio (Seulement si l'interrupteur est activé)
+                if enable_audio:
+                    try:
+                        with st.spinner("Génération de la voix..."):
+                            # Nettoyage
+                            text_for_audio = re.sub(r'[\*#]', '', response.text)
+                            text_for_audio = re.sub(r'p\.\s*(\d+)', r'page \1', text_for_audio)
+                            text_for_audio = text_for_audio.replace("Pr.", "Professeur")
+                            
+                            # Création MP3
+                            tts = gTTS(text=text_for_audio, lang='fr')
+                            
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                                tts.save(fp.name)
+                                audio_path = fp.name
+                            
+                            st.audio(audio_path, format="audio/mp3")
+                            
+                    except Exception as e:
+                        st.warning(f"Note : Audio non disponible ({e})")
