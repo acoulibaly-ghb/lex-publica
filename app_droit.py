@@ -7,8 +7,8 @@ import tempfile
 import re
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Tuteur Droit Admin", page_icon="⚖️")
-st.title("⚖️ Assistant Droit Administratif")
+st.set_page_config(page_title="Lex publica Coulibaly", page_icon="⚖️")
+st.title("⚖️ Assistant Droit administratif")
 
 # --- RÉCUPÉRATION DE LA CLÉ API SECRÈTE ---
 api_key = st.secrets["GEMINI_API_KEY"]
