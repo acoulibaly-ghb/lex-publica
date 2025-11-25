@@ -6,122 +6,125 @@ from gtts import gTTS
 import tempfile
 import re
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Tuteur Droit Admin", page_icon="⚖️")
-st.title("⚖️ Assistant Droit administratif")
-
-# --- BARRE LATÉRALE (PARAMÈTRES) ---
-with st.sidebar:
-    st.header("Paramètres")
-    # L'interrupteur pour la voix. Par défaut sur False (Eteint) pour la vitesse.
-    enable_audio = st.toggle("Activer la lecture vocale 🗣️", value=False)
-    
-    if enable_audio:
-        st.warning("⚠️ La voix ralentit un peu la réponse.")
-    else:
-        st.info("⚡ Mode texte rapide activé.")
+st.title("⚖️ Assistant Droit Administratif")
 
 # --- RÉCUPÉRATION DE LA CLÉ API ---
-api_key = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=api_key)
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+else:
+    st.error("Clé API non configurée.")
+    st.stop()
 
 # --- PROMPT SYSTÈME ---
 SYSTEM_PROMPT = """
-CONTEXTE ET RÔLE :
-Tu es l'assistant pédagogique virtuel expert en Droit Administratif du Professeur Coulibaly.
-Ta base de connaissances est STRICTEMENT limitée aux documents fournis en contexte ("le cours du professeur Coulibaly").
+CONTEXTE : Tu es l'assistant pédagogique expert du Professeur Coulibaly.
+BASE DE CONNAISSANCES : Strictement limitée aux fichiers PDF fournis ("le cours").
 
-RÈGLES ABSOLUES :
-1. SOURCE UNIQUE : Tes réponses doivent provenir EXCLUSIVEMENT du cours fourni. N'utilise jamais tes connaissances externes pour combler un vide.
-2. HONNÊTETÉ : Si la réponse n'est pas dans le cours, dis : "Cette précision ne figure pas dans le cours du Pr. Coulibaly." Ne tente pas d'inventer.
-3. PRÉCISION : Cite toujours les arrêts (ex: **CE, 1933, Benjamin**) tels qu'ils apparaissent dans le document.
+RÈGLES PÉDAGOGIQUES :
+1. Si l'étudiant pose une question : Réponds en te basant EXCLUSIVEMENT sur le cours. Cite les arrêts et les pages.
+2. Si l'étudiant demande un QUIZ ou une COLLE : 
+   - Choisis un concept, une définition ou un arrêt du cours.
+   - Pose une question précise dessus.
+   - NE DONNE PAS la réponse tout de suite. Attends que l'étudiant essaie de répondre.
+   - Une fois que l'étudiant a répondu, corrige-le avec bienveillance en citant le passage du cours.
 
-STYLE ET FORMAT :
-- Ton : Professionnel, pédagogique, encourageant.
-- Oralité : Fais des phrases courtes et claires.
-- Structure : Utilise des titres, des listes à puces et du gras pour les mots-clés.
+TON : Professionnel, encourageant, clair. Phrases courtes (pour l'audio).
 """
 
-# --- FONCTION DE CHARGEMENT DES COURS ---
+# --- FONCTION CHARGEMENT PDF ---
 @st.cache_resource
 def load_and_process_pdfs():
-    """Charge tous les PDF du dossier et les envoie à Gemini une seule fois."""
     pdf_files = glob.glob("*.pdf")
-    
     if not pdf_files:
-        st.error("Aucun fichier PDF trouvé dans le dossier !")
         return None
-
-    uploaded_files_refs = []
-    # Petit indicateur discret au démarrage
-    with st.spinner(f"Chargement de {len(pdf_files)} chapitres de cours..."):
+    
+    uploaded_refs = []
+    status = st.empty()
+    status.text(f"Chargement de {len(pdf_files)} fichiers de cours...")
+    
+    try:
         for pdf in pdf_files:
             uploaded_file = genai.upload_file(pdf, mime_type="application/pdf")
-            uploaded_files_refs.append(uploaded_file)
-            
-    return uploaded_files_refs
+            uploaded_refs.append(uploaded_file)
+        status.empty()
+        return uploaded_refs
+    except:
+        return None
 
-# --- DÉMARRAGE DE LA SESSION ---
+# --- INITIALISATION SESSION ---
 if "chat_session" not in st.session_state:
-    try:
-        docs = load_and_process_pdfs()
-        
-        if docs:
-            # On reste sur le modèle 2.5-flash qui est le bon compromis
-            model = genai.GenerativeModel(
-                model_name="gemini-2.5-flash-lite",
-                system_instruction=SYSTEM_PROMPT
-            )
-            st.session_state.chat_session = model.start_chat(
-                history=[
-                    {"role": "user", "parts": docs},
-                    {"role": "model", "parts": ["Bien reçu. Je suis prêt."]}
-                ]
-            )
-            st.session_state.messages = []
-            st.toast("Cours chargé avec succès !", icon="✅")
-            
-    except Exception as e:
-        st.error(f"Erreur de connexion : {e}")
+    docs = load_and_process_pdfs()
+    if docs:
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash-lite", # Le modèle rapide
+            system_instruction=SYSTEM_PROMPT
+        )
+        st.session_state.chat_session = model.start_chat(
+            history=[
+                {"role": "user", "parts": docs},
+                {"role": "model", "parts": ["Je suis prêt."]}
+            ]
+        )
+        st.session_state.messages = []
+    else:
+        st.warning("Veuillez ajouter des PDF sur GitHub.")
 
-# --- INTERFACE DE CHAT ---
+# --- BARRE LATÉRALE ---
+with st.sidebar:
+    st.header("⚙️ Options")
+    audio_active = st.toggle("🔊 Activer la voix", value=False)
+    
+    st.divider()
+    st.header("🎓 Entraînement")
+    
+    # BOUTON QUIZ : C'est ici que la magie opère
+    if st.button("🃏 Pose-moi une colle !"):
+        if "chat_session" in st.session_state and st.session_state.chat_session:
+            # On envoie une instruction cachée à l'IA
+            prompt_quiz = "Pose-moi une question de vérification de connaissances sur un point aléatoire du cours. Ne donne pas la réponse."
+            
+            # On traite la réponse comme un message normal
+            with st.spinner("Le Professeur cherche une question..."):
+                response = st.session_state.chat_session.send_message(prompt_quiz)
+                st.session_state.messages.append({"role": "assistant", "content": response.text})
+                # On force le rechargement pour afficher la question tout de suite
+                st.rerun()
+
+# --- AFFICHAGE DU CHAT ---
 if "messages" in st.session_state:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-# Zone de saisie
-if prompt := st.chat_input("Votre question sur le cours..."):
+# --- ZONE DE SAISIE ---
+if prompt := st.chat_input("Votre réponse ou votre question..."):
+    # 1. Affiche le message utilisateur
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Réponse IA
-    if st.session_state.chat_session:
+    # 2. Réponse de l'IA
+    if "chat_session" in st.session_state:
         with st.chat_message("assistant"):
-            with st.spinner("Recherche dans le cours..."):
-                # 1. Texte (Toujours généré)
-                response = st.session_state.chat_session.send_message(prompt)
-                st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text})
-                
-                # 2. Audio (Seulement si l'interrupteur est activé)
-                if enable_audio:
-                    try:
-                        with st.spinner("Génération de la voix..."):
-                            # Nettoyage
-                            text_for_audio = re.sub(r'[\*#]', '', response.text)
-                            text_for_audio = re.sub(r'p\.\s*(\d+)', r'page \1', text_for_audio)
-                            text_for_audio = text_for_audio.replace("Pr.", "Professeur")
+            with st.spinner("Réflexion..."):
+                try:
+                    response = st.session_state.chat_session.send_message(prompt)
+                    st.markdown(response.text)
+                    st.session_state.messages.append({"role": "assistant", "content": response.text})
+
+                    # Audio optionnel
+                    if audio_active:
+                        clean_text = re.sub(r'[\*#]', '', response.text)
+                        clean_text = re.sub(r'p\.\s*(\d+)', r'page \1', clean_text)
+                        clean_text = clean_text.replace("Pr.", "Professeur")
+                        
+                        tts = gTTS(text=clean_text, lang='fr')
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+                            tts.save(fp.name)
+                            st.audio(fp.name, format="audio/mp3")
                             
-                            # Création MP3
-                            tts = gTTS(text=text_for_audio, lang='fr')
-                            
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-                                tts.save(fp.name)
-                                audio_path = fp.name
-                            
-                            st.audio(audio_path, format="audio/mp3")
-                            
-                    except Exception as e:
-                        st.warning(f"Note : Audio non disponible ({e})")
+                except Exception as e:
+                    st.error(f"Erreur : {e}")
