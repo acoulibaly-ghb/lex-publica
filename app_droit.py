@@ -8,7 +8,7 @@ import re
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="Tuteur Droit Admin", page_icon="⚖️")
-st.title("⚖️ Assistant Droit Administratif")
+st.title("⚖️ Assistant Droit administratif")
 
 # --- RÉCUPÉRATION DE LA CLÉ API ---
 if "GEMINI_API_KEY" in st.secrets:
