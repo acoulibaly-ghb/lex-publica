@@ -8,7 +8,7 @@ import re
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="Tuteur Droit Admin", page_icon="⚖️")
-st.title("⚖️ Assistant Droit Administratif")
+st.title("⚖️ Assistant Droit administratif")
 
 # --- BARRE LATÉRALE (PARAMÈTRES) ---
 with st.sidebar:
