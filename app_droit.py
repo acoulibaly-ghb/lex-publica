@@ -150,16 +150,20 @@ if user_input:
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-                    # Audio IA (si activé via le bouton OU si l'étudiant a parlé)
+                    # Audio IA : On l'active si l'option est cochée OU si l'entrée était vocale
                     if audio_active or is_audio_message:
                         clean_text = re.sub(r'[\*#]', '', response.text)
                         clean_text = re.sub(r'p\.\s*(\d+)', r'page \1', clean_text)
                         clean_text = clean_text.replace("Pr.", "Professeur")
                         
                         tts = gTTS(text=clean_text, lang='fr')
+                        
+                        # MODIFICATION SAFARI : On ouvre le fichier en mode binaire explicite
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
                             tts.save(fp.name)
-                            st.audio(fp.name, format="audio/mp3")
+                            # On lit le fichier pour le donner à Streamlit
+                            with open(fp.name, "rb") as audio_file:
+                                st.audio(audio_file, format="audio/mpeg") # <-- Notez "mpeg" au lieu de "mp3"
                             
                 except Exception as e:
                     st.error(f"Erreur : {e}")
