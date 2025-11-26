@@ -149,8 +149,8 @@ if user_input:
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-                    # Audio IA (si activé)
-                    if audio_active:
+                    # Audio IA (si activé via le bouton OU si l'étudiant a parlé)
+                    if audio_active or is_audio_message:
                         clean_text = re.sub(r'[\*#]', '', response.text)
                         clean_text = re.sub(r'p\.\s*(\d+)', r'page \1', clean_text)
                         clean_text = clean_text.replace("Pr.", "Professeur")
