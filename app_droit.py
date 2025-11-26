@@ -24,12 +24,10 @@ CONTEXTE : Tu es l'assistant pédagogique expert du Professeur Coulibaly.
 BASE DE CONNAISSANCES : Strictement limitée aux fichiers PDF fournis ("le cours").
 
 RÈGLES PÉDAGOGIQUES :
-1. Si l'étudiant pose une question (texte ou audio) : Réponds en te basant EXCLUSIVEMENT sur le cours. Cite les arrêts et les pages.
-2. Si l'étudiant demande un QUIZ ou une COLLE : 
-   - Identifie un point précis du cours.
-   - Pose une question ouverte.
-   - NE DONNE PAS la réponse tout de suite. Attends que l'étudiant essaie de répondre.
-   - Corrige avec bienveillance.
+1. Si l'étudiant pose une question (texte ou audio) : Réponds en te basant EXCLUSIVEMENT sur le cours.
+2. Si la question est AUDIO : Commence TOUJOURS ta réponse par une transcription de ce que tu as entendu. 
+   Exemple : "Vous avez demandé : 'Quelle est la définition du service public ?'. Voici la réponse : ..."
+3. Si l'étudiant demande un QUIZ : Pose une question ouverte sur un point précis. Attends la réponse.
 
 TON : Professionnel, encourageant, clair. Phrases courtes.
 """
@@ -42,14 +40,15 @@ def load_and_process_pdfs():
         return None
     
     uploaded_refs = []
-    status = st.empty()
-    status.text(f"Chargement de {len(pdf_files)} fichiers de cours...")
+    # On utilise un conteneur vide pour le chargement pour qu'il disparaisse après
+    placeholder = st.empty()
+    placeholder.text(f"Chargement de {len(pdf_files)} fichiers de cours...")
     
     try:
         for pdf in pdf_files:
             uploaded_file = genai.upload_file(pdf, mime_type="application/pdf")
             uploaded_refs.append(uploaded_file)
-        status.empty()
+        placeholder.empty() # Hop, on efface le message de chargement
         return uploaded_refs
     except:
         return None
@@ -62,8 +61,6 @@ if "chat_session" not in st.session_state:
             model_name="gemini-2.5-flash-lite", 
             system_instruction=SYSTEM_PROMPT
         )
-        # On stocke les docs dans la session pour pouvoir les réutiliser avec l'audio
-        st.session_state.docs_refs = docs
         st.session_state.chat_session = model.start_chat(
             history=[
                 {"role": "user", "parts": docs},
@@ -77,7 +74,7 @@ if "chat_session" not in st.session_state:
 # --- BARRE LATÉRALE ---
 with st.sidebar:
     st.header("⚙️ Options")
-    audio_active = st.toggle("🔊 Activer la réponse vocale", value=False)
+    audio_active = st.toggle("🔊 Activer la réponse vocale de l'IA", value=False)
     
     st.divider()
     st.header("🎓 Entraînement")
@@ -85,7 +82,7 @@ with st.sidebar:
     if st.button("🃏 Pose-moi une colle !"):
         if "chat_session" in st.session_state:
             prompt_quiz = "Pose-moi une question de vérification sur le cours. Ne donne pas la réponse."
-            with st.spinner("Le Professeur cherche une question..."):
+            with st.spinner("Recherche d'une question..."):
                 response = st.session_state.chat_session.send_message(prompt_quiz)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 st.rerun()
@@ -94,20 +91,20 @@ with st.sidebar:
 if "messages" in st.session_state:
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+            # Si le message vient de l'utilisateur et contient l'indicateur spécial
+            if message["role"] == "user" and message["content"] == "🎤 *[Question Vocale envoyée]*":
+                st.markdown("🎤 *Question Vocale envoyée*")
+            else:
+                st.markdown(message["content"])
 
-# --- GESTION DOUBLE ENTRÉE (VOCALE OU TEXTE) ---
-
-# 1. Le Widget Micro (Nouveauté Streamlit)
+# --- ZONES DE SAISIE ---
+# On met le micro et le texte l'un au-dessus de l'autre
 audio_input = st.audio_input("🎙️ Posez votre question vocalement")
-
-# 2. La zone de texte classique
 text_input = st.chat_input("... ou écrivez votre question ici")
 
 user_input = None
 is_audio_message = False
 
-# Logique de priorité : Si on parle, ça prend le pas sur l'écrit
 if audio_input:
     user_input = audio_input
     is_audio_message = True
@@ -115,49 +112,44 @@ elif text_input:
     user_input = text_input
     is_audio_message = False
 
-# --- TRAITEMENT DE LA QUESTION ---
+# --- TRAITEMENT ---
 if user_input:
-    # A. Affichage coté étudiant
+    # 1. On affiche un message PROPRE coté étudiant (plus de lecteur audio moche)
     if is_audio_message:
-        # On affiche un petit lecteur pour qu'il réécoute sa question
+        st.session_state.messages.append({"role": "user", "content": "🎤 *[Question Vocale envoyée]*"})
         with st.chat_message("user"):
-            st.audio(user_input)
-            st.caption("🎤 Question vocale envoyée")
-        st.session_state.messages.append({"role": "user", "content": "🎤 *[Question Vocale]*"})
+            st.markdown("🎤 *Question Vocale envoyée*")
     else:
-        # On affiche le texte
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
-    # B. Envoi à l'IA
+    # 2. Envoi à l'IA
     if "chat_session" in st.session_state:
         with st.chat_message("assistant"):
             with st.spinner("Analyse en cours..."):
                 try:
                     if is_audio_message:
-                        # MAGIE : On envoie le fichier audio directement à Gemini !
-                        # Il faut sauvegarder le fichier audio temporairement
+                        # Gestion Audio
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio:
                             tmp_audio.write(user_input.getvalue())
-                            tmp_audio_path = tmp_audio.name
+                            tmp_path = tmp_audio.name
                         
-                        # On l'envoie à Google
-                        uploaded_audio = genai.upload_file(tmp_audio_path, mime_type="audio/wav")
+                        uploaded_audio = genai.upload_file(tmp_path, mime_type="audio/wav")
                         
-                        # On demande à l'IA d'écouter et de répondre
-                        response = st.session_state.chat_session.send_message(
-                            ["Écoute cette question de l'étudiant et réponds-y en te basant sur le cours.", uploaded_audio]
-                        )
+                        # Consigne spécifique pour forcer la transcription
+                        instruction = "Écoute l'audio. Commence ta réponse par : 'Vous avez demandé : [Texte de la question]'. Puis réponds avec le cours."
+                        
+                        response = st.session_state.chat_session.send_message([instruction, uploaded_audio])
                     else:
-                        # Cas classique texte
+                        # Gestion Texte
                         response = st.session_state.chat_session.send_message(user_input)
 
-                    # Affichage réponse
+                    # Affichage
                     st.markdown(response.text)
                     st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-                    # Lecture Audio de la réponse (si option activée)
+                    # Audio IA (si activé)
                     if audio_active:
                         clean_text = re.sub(r'[\*#]', '', response.text)
                         clean_text = re.sub(r'p\.\s*(\d+)', r'page \1', clean_text)
@@ -169,4 +161,4 @@ if user_input:
                             st.audio(fp.name, format="audio/mp3")
                             
                 except Exception as e:
-                    st.error(f"Une erreur est survenue : {e}")
+                    st.error(f"Erreur : {e}")
