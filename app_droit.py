@@ -137,9 +137,17 @@ if user_input:
                         
                         uploaded_audio = genai.upload_file(tmp_path, mime_type="audio/wav")
                         
-                        # Consigne spécifique pour forcer la transcription
-                        instruction = "Écoute l'audio. Commence ta réponse par : 'Vous avez demandé : [Texte de la question]'. Puis réponds avec le cours."
+                        # Consigne "Militaire" pour forcer la transcription
+                        instruction = """
+                        TÂCHE 1 : Transcris fidèlement la question de l'étudiant.
+                        TÂCHE 2 : Réponds à la question en utilisant le cours.
                         
+                        FORMAT DE RÉPONSE OBLIGATOIRE :
+                        "Vous avez demandé : [La transcription ici]..."
+                        
+                        [La réponse ici]
+                        """
+                        # --- FIN DE LA MODIFICATION ---
                         response = st.session_state.chat_session.send_message([instruction, uploaded_audio])
                     else:
                         # Gestion Texte
