@@ -18,18 +18,19 @@ else:
     st.error("Clé API non configurée.")
     st.stop()
 
-# --- PROMPT SYSTÈME ---
+# --- PROMPT SYSTÈME (VERSION STRICTE TRANSCRIPTION) ---
 SYSTEM_PROMPT = """
 CONTEXTE : Tu es l'assistant pédagogique expert du Professeur Coulibaly.
 BASE DE CONNAISSANCES : Strictement limitée aux fichiers PDF fournis ("le cours").
 
-RÈGLES PÉDAGOGIQUES :
-1. Si l'étudiant pose une question (texte ou audio) : Réponds en te basant EXCLUSIVEMENT sur le cours.
-2. Si la question est AUDIO : Commence TOUJOURS ta réponse par une transcription de ce que tu as entendu. 
-   Exemple : "Vous avez demandé : 'Quelle est la définition du service public ?'. Voici la réponse : ..."
-3. Si l'étudiant demande un QUIZ : Pose une question ouverte sur un point précis. Attends la réponse.
+RÈGLES ABSOLUES :
+1. Si l'étudiant pose une question TEXTE : Réponds directement avec le cours.
+2. Si l'étudiant pose une question AUDIO :
+   - Ton PREMIER paragraphe doit OBLIGATOIREMENT être : "Vous avez demandé : [Transcription mot à mot de la question]"
+   - Ton SECOND paragraphe est la réponse basée sur le cours.
+3. Ne jamais inventer hors du cours.
 
-TON : Professionnel, encourageant, clair. Phrases courtes.
+TON : Professionnel, encourageant, clair.
 """
 
 # --- FONCTION CHARGEMENT PDF ---
@@ -137,18 +138,10 @@ if user_input:
                         
                         uploaded_audio = genai.upload_file(tmp_path, mime_type="audio/wav")
                         
-                        # Consigne "Militaire" pour forcer la transcription
-                        instruction = """
-                        TÂCHE 1 : Transcris fidèlement la question de l'étudiant.
-                        TÂCHE 2 : Réponds à la question en utilisant le cours.
-                        
-                        FORMAT DE RÉPONSE OBLIGATOIRE :
-                        "Vous avez demandé : [La transcription ici]..."
-                        
-                        [La réponse ici]
-                        """
-                        # --- FIN DE LA MODIFICATION ---
-                        response = st.session_state.chat_session.send_message([instruction, uploaded_audio])
+                        # On envoie l'audio avec une consigne simple (le System Prompt fait le reste)
+                        response = st.session_state.chat_session.send_message(
+                            ["Réponds à cette question orale en suivant tes règles de transcription.", uploaded_audio]
+                        )
                     else:
                         # Gestion Texte
                         response = st.session_state.chat_session.send_message(user_input)
